@@ -3,6 +3,7 @@ export type Peer = "host" | "viewer";
 export interface SdpPayload {
   sdp: RTCSessionDescriptionInit;
   viewerId: string; // Added to route signaling to the correct peer
+  mode?: "screen" | "camera";
 }
 
 export interface IceCandidatePayload {

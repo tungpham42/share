@@ -12,7 +12,7 @@ import {
   bindConnectionState,
   relayLocalIceCandidates,
   getLocalCameraStream,
-  getLocalScreenStream, // NEW Import
+  getLocalScreenStream,
   addCameraStreamToConnection,
 } from "../lib/webrtcSignaling";
 
@@ -80,7 +80,6 @@ export default function Host() {
 
   useEffect(() => () => cleanup(), [cleanup]);
 
-  // Securely attach the stream to the video element once it mounts
   useEffect(() => {
     if (videoRef.current && streamRef.current) {
       videoRef.current.srcObject = streamRef.current;
@@ -100,11 +99,10 @@ export default function Host() {
       }
 
       try {
-        // --- NEW: Use our custom screen stream function with audio mixing ---
         const stream =
           mode === "camera"
             ? await getLocalCameraStream()
-            : await getLocalScreenStream(); // Updated
+            : await getLocalScreenStream();
 
         streamRef.current = stream;
 
@@ -159,7 +157,10 @@ export default function Host() {
 
             const offer = await pc.createOffer();
             await pc.setLocalDescription(offer);
-            const sdpPayload: SdpPayload = { sdp: offer, viewerId };
+
+            // --- FIX: Pass the `mode` parameter in the payload sent to viewers ---
+            const sdpPayload: SdpPayload = { sdp: offer, viewerId, mode };
+
             channel.send({
               type: "broadcast",
               event: "offer",
@@ -225,7 +226,7 @@ export default function Host() {
         }}
       >
         <Title level={2} style={{ marginTop: 0, color: "#ff7a45" }}>
-          Share Your Stream <DesktopOutlined />
+          SOFTY Share <DesktopOutlined />
         </Title>
 
         {error ? (

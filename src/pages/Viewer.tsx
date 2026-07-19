@@ -7,11 +7,17 @@ import type { SdpPayload, IceCandidatePayload } from "../lib/signaling";
 import {
   bindConnectionState,
   relayLocalIceCandidates,
-  bindRemoteCameraStream, // NEW Import
+  bindRemoteCameraStream,
 } from "../lib/webrtcSignaling";
 
 import { Card, Button, Typography, Alert } from "antd";
-import { EyeOutlined, SoundOutlined, LoadingOutlined } from "@ant-design/icons";
+import {
+  EyeOutlined,
+  SoundOutlined,
+  LoadingOutlined,
+  DesktopOutlined,
+  VideoCameraOutlined,
+} from "@ant-design/icons";
 
 const { Title, Text } = Typography;
 
@@ -30,6 +36,9 @@ export default function Viewer() {
   const [status, setStatus] = useState<Status>("waiting");
   const [error, setError] = useState<string | null>(null);
   const [needsUnmute, setNeedsUnmute] = useState(false);
+
+  const [shareMode, setShareMode] = useState<"screen" | "camera">("screen");
+
   const videoRef = useRef<HTMLVideoElement>(null);
 
   useEffect(() => {
@@ -44,7 +53,6 @@ export default function Viewer() {
     let pc: RTCPeerConnection | undefined;
     let channel: RealtimeChannel | undefined;
 
-    // Generate a unique ID for this specific viewer session
     const viewerId = Math.random().toString(36).substring(2, 15);
 
     async function setup() {
@@ -54,12 +62,10 @@ export default function Viewer() {
 
         pc = new RTCPeerConnection({ iceServers });
 
-        // --- NEW: Use the safe binder that guarantees event.streams[0] ---
         bindRemoteCameraStream(pc, (stream) => {
           const video = videoRef.current;
           if (!video) return;
 
-          // Only assign and play if the stream is new (prevents multiple play calls on multi-track streams)
           if (video.srcObject !== stream) {
             video.srcObject = stream;
             video.play().catch(() => {
@@ -85,10 +91,8 @@ export default function Viewer() {
           config: { broadcast: { self: false } },
         });
 
-        // Forward local ICE candidates with our unique ID
         relayLocalIceCandidates(pc, channel, "viewer", viewerId);
 
-        // Listen for remote ICE candidates directed ONLY at this viewerId
         channel.on(
           "broadcast",
           { event: "ice-candidate" },
@@ -103,14 +107,18 @@ export default function Viewer() {
           },
         );
 
-        // Listen for an offer directed ONLY at this viewerId
         channel.on(
           "broadcast",
           { event: "offer" },
           async ({ payload }: { payload: SdpPayload }) => {
+            // Simplified mapping because SdpPayload natively includes `mode` now
             if (payload.viewerId !== viewerId) return;
 
-            clearInterval(joinInterval); // Stop pinging the host once we're acknowledged
+            if (payload.mode) {
+              setShareMode(payload.mode);
+            }
+
+            clearInterval(joinInterval);
             setStatus("connecting");
 
             await pc!.setRemoteDescription(payload.sdp);
@@ -128,7 +136,6 @@ export default function Viewer() {
 
         channel.subscribe((subStatus) => {
           if (subStatus === "SUBSCRIBED" && !cancelled && channel) {
-            // Keep knocking until the host creates an offer for us
             channel.send({
               type: "broadcast",
               event: "join",
@@ -180,7 +187,12 @@ export default function Viewer() {
         }}
       >
         <Title level={2} style={{ marginTop: 0, color: "#ff7a45" }}>
-          Viewing Screen Share <EyeOutlined />
+          Viewing {shareMode === "camera" ? "Camera" : "Screen"} Share{" "}
+          {shareMode === "camera" ? (
+            <VideoCameraOutlined />
+          ) : (
+            <DesktopOutlined />
+          )}
         </Title>
 
         {error && (
