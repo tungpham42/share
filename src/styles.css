@@ -1,0 +1,48 @@
+@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap");
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family:
+    "Plus Jakarta Sans",
+    -apple-system,
+    BlinkMacSystemFont,
+    sans-serif;
+  /* Warm, cozy gradient background */
+  background: linear-gradient(135deg, #fff0f0 0%, #ffe4b5 100%);
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  color: #4a4a4a;
+}
+
+.page-container {
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+}
+
+.video-wrapper {
+  border-radius: 16px;
+  overflow: hidden;
+  background: #000;
+  /* Soft, warm glow shadow */
+  box-shadow: 0 12px 32px rgba(255, 122, 69, 0.2);
+  margin-top: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.preview,
+.viewer-video {
+  width: 100%;
+  display: block;
+}
+
+.version-badge {
+  position: fixed;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  z-index: 100;
+}
