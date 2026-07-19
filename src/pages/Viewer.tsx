@@ -12,7 +12,6 @@ import {
 
 import { Card, Button, Typography, Alert } from "antd";
 import {
-  EyeOutlined,
   SoundOutlined,
   LoadingOutlined,
   DesktopOutlined,
