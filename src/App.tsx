@@ -2,7 +2,6 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ConfigProvider } from "antd";
 import Host from "./pages/Host";
 import Viewer from "./pages/Viewer";
-import VersionBadge from "./VersionBadge";
 
 export default function App() {
   return (
@@ -21,7 +20,6 @@ export default function App() {
           <Route path="/" element={<Host />} />
           <Route path="/room/:roomId" element={<Viewer />} />
         </Routes>
-        <VersionBadge />
       </BrowserRouter>
     </ConfigProvider>
   );
