@@ -7,6 +7,7 @@ import type { SdpPayload, IceCandidatePayload } from "../lib/signaling";
 import {
   bindConnectionState,
   relayLocalIceCandidates,
+  bindRemoteCameraStream, // NEW Import
 } from "../lib/webrtcSignaling";
 
 import { Card, Button, Typography, Alert } from "antd";
@@ -53,18 +54,23 @@ export default function Viewer() {
 
         pc = new RTCPeerConnection({ iceServers });
 
-        pc.ontrack = (event) => {
+        // --- NEW: Use the safe binder that guarantees event.streams[0] ---
+        bindRemoteCameraStream(pc, (stream) => {
           const video = videoRef.current;
           if (!video) return;
-          video.srcObject = event.streams[0];
-          video.play().catch(() => {
-            video.muted = true;
-            setNeedsUnmute(true);
-            video
-              .play()
-              .catch((err) => console.error("Video playback failed:", err));
-          });
-        };
+
+          // Only assign and play if the stream is new (prevents multiple play calls on multi-track streams)
+          if (video.srcObject !== stream) {
+            video.srcObject = stream;
+            video.play().catch(() => {
+              video.muted = true;
+              setNeedsUnmute(true);
+              video
+                .play()
+                .catch((err) => console.error("Video playback failed:", err));
+            });
+          }
+        });
 
         bindConnectionState(pc, {
           onConnected: () => {

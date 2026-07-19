@@ -11,6 +11,9 @@ import type {
 import {
   bindConnectionState,
   relayLocalIceCandidates,
+  getLocalCameraStream,
+  getLocalScreenStream, // NEW Import
+  addCameraStreamToConnection,
 } from "../lib/webrtcSignaling";
 
 import { Card, Button, Typography, Space, Input, Alert } from "antd";
@@ -21,6 +24,7 @@ import {
   StopOutlined,
   ApiOutlined,
   SmileOutlined,
+  VideoCameraOutlined,
 } from "@ant-design/icons";
 
 const { Title, Text } = Typography;
@@ -34,7 +38,7 @@ type Status =
   | "error";
 
 const getStatusText = (status: Status, count: number): React.ReactNode => {
-  if (status === "idle") return "Ready to share your screen.";
+  if (status === "idle") return "Ready to share your screen or camera.";
   if (status === "sharing") return "Waiting for friendly faces to join…";
   if (status === "connecting") return "New viewer joining! Connecting…";
   if (status === "connected")
@@ -76,122 +80,130 @@ export default function Host() {
 
   useEffect(() => () => cleanup(), [cleanup]);
 
-  // FIX: Securely attach the stream to the video element once it mounts
+  // Securely attach the stream to the video element once it mounts
   useEffect(() => {
     if (videoRef.current && streamRef.current) {
       videoRef.current.srcObject = streamRef.current;
     }
   }, [status]);
 
-  const startShare = useCallback(async () => {
-    setError(null);
+  const startShare = useCallback(
+    async (mode: "screen" | "camera" = "screen") => {
+      setError(null);
 
-    if (!supabaseConfigured || !supabase) {
-      setError("Missing Supabase configuration. Please check your .env file.");
-      setStatus("error");
-      return;
-    }
+      if (!supabaseConfigured || !supabase) {
+        setError(
+          "Missing Supabase configuration. Please check your .env file.",
+        );
+        setStatus("error");
+        return;
+      }
 
-    try {
-      const stream = await navigator.mediaDevices.getDisplayMedia({
-        video: true,
-        audio: true,
-      });
+      try {
+        // --- NEW: Use our custom screen stream function with audio mixing ---
+        const stream =
+          mode === "camera"
+            ? await getLocalCameraStream()
+            : await getLocalScreenStream(); // Updated
 
-      streamRef.current = stream;
+        streamRef.current = stream;
 
-      stream.getVideoTracks()[0].addEventListener("ended", () => {
-        setStatus("ended");
+        stream.getVideoTracks()[0].addEventListener("ended", () => {
+          setStatus("ended");
+          cleanup();
+        });
+
+        const id = generateRoomId();
+        setRoomId(id);
+        setStatus("sharing");
+
+        const iceServers = await fetchIceServers();
+        const channel = supabase.channel(`room-${id}`, {
+          config: { broadcast: { self: false } },
+        });
+        channelRef.current = channel;
+
+        channel.on(
+          "broadcast",
+          { event: "join" },
+          async ({ payload }: { payload: JoinPayload }) => {
+            const { viewerId } = payload;
+            if (!viewerId || peersRef.current[viewerId]) return;
+
+            if (viewerCount === 0) setStatus("connecting");
+
+            const pc = new RTCPeerConnection({ iceServers });
+            peersRef.current[viewerId] = pc;
+
+            addCameraStreamToConnection(pc, stream);
+
+            relayLocalIceCandidates(pc, channel, "host", viewerId);
+
+            bindConnectionState(pc, {
+              onConnected: () => {
+                const activeCount = Object.keys(peersRef.current).length;
+                setViewerCount(activeCount);
+                setStatus("connected");
+              },
+              onTerminal: () => {
+                if (peersRef.current[viewerId]) {
+                  peersRef.current[viewerId].close();
+                  delete peersRef.current[viewerId];
+                }
+                const activeCount = Object.keys(peersRef.current).length;
+                setViewerCount(activeCount);
+                if (activeCount === 0 && streamRef.current)
+                  setStatus("sharing");
+              },
+            });
+
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            const sdpPayload: SdpPayload = { sdp: offer, viewerId };
+            channel.send({
+              type: "broadcast",
+              event: "offer",
+              payload: sdpPayload,
+            });
+          },
+        );
+
+        channel.on(
+          "broadcast",
+          { event: "answer" },
+          async ({ payload }: { payload: SdpPayload }) => {
+            const pc = peersRef.current[payload.viewerId];
+            if (pc && !pc.currentRemoteDescription) {
+              await pc.setRemoteDescription(payload.sdp);
+            }
+          },
+        );
+
+        channel.on(
+          "broadcast",
+          { event: "ice-candidate" },
+          async ({ payload }: { payload: IceCandidatePayload }) => {
+            if (payload.from !== "viewer") return;
+            const pc = peersRef.current[payload.viewerId];
+            if (!pc) return;
+
+            try {
+              await pc.addIceCandidate(payload.candidate);
+            } catch (err) {
+              console.error("Error adding ICE candidate", err);
+            }
+          },
+        );
+
+        channel.subscribe();
+      } catch (err) {
+        setError((err as Error).message);
+        setStatus("error");
         cleanup();
-      });
-
-      const id = generateRoomId();
-      setRoomId(id);
-      setStatus("sharing");
-
-      const iceServers = await fetchIceServers();
-      const channel = supabase.channel(`room-${id}`, {
-        config: { broadcast: { self: false } },
-      });
-      channelRef.current = channel;
-
-      channel.on(
-        "broadcast",
-        { event: "join" },
-        async ({ payload }: { payload: JoinPayload }) => {
-          const { viewerId } = payload;
-          if (!viewerId || peersRef.current[viewerId]) return;
-
-          if (viewerCount === 0) setStatus("connecting");
-
-          const pc = new RTCPeerConnection({ iceServers });
-          peersRef.current[viewerId] = pc;
-          stream.getTracks().forEach((track) => pc.addTrack(track, stream));
-
-          relayLocalIceCandidates(pc, channel, "host", viewerId);
-
-          bindConnectionState(pc, {
-            onConnected: () => {
-              const activeCount = Object.keys(peersRef.current).length;
-              setViewerCount(activeCount);
-              setStatus("connected");
-            },
-            onTerminal: () => {
-              if (peersRef.current[viewerId]) {
-                peersRef.current[viewerId].close();
-                delete peersRef.current[viewerId];
-              }
-              const activeCount = Object.keys(peersRef.current).length;
-              setViewerCount(activeCount);
-              if (activeCount === 0 && streamRef.current) setStatus("sharing");
-            },
-          });
-
-          const offer = await pc.createOffer();
-          await pc.setLocalDescription(offer);
-          const sdpPayload: SdpPayload = { sdp: offer, viewerId };
-          channel.send({
-            type: "broadcast",
-            event: "offer",
-            payload: sdpPayload,
-          });
-        },
-      );
-
-      channel.on(
-        "broadcast",
-        { event: "answer" },
-        async ({ payload }: { payload: SdpPayload }) => {
-          const pc = peersRef.current[payload.viewerId];
-          if (pc && !pc.currentRemoteDescription) {
-            await pc.setRemoteDescription(payload.sdp);
-          }
-        },
-      );
-
-      channel.on(
-        "broadcast",
-        { event: "ice-candidate" },
-        async ({ payload }: { payload: IceCandidatePayload }) => {
-          if (payload.from !== "viewer") return;
-          const pc = peersRef.current[payload.viewerId];
-          if (!pc) return;
-
-          try {
-            await pc.addIceCandidate(payload.candidate);
-          } catch (err) {
-            console.error("Error adding ICE candidate", err);
-          }
-        },
-      );
-
-      channel.subscribe();
-    } catch (err) {
-      setError((err as Error).message);
-      setStatus("error");
-      cleanup();
-    }
-  }, [cleanup, viewerCount]);
+      }
+    },
+    [cleanup, viewerCount],
+  );
 
   const stopShare = useCallback(() => {
     cleanup();
@@ -213,7 +225,7 @@ export default function Host() {
         }}
       >
         <Title level={2} style={{ marginTop: 0, color: "#ff7a45" }}>
-          Share Your Screen <DesktopOutlined />
+          Share Your Stream <DesktopOutlined />
         </Title>
 
         {error ? (
@@ -240,15 +252,26 @@ export default function Host() {
         )}
 
         {status === "idle" || status === "ended" || status === "error" ? (
-          <Button
-            type="primary"
-            size="large"
-            icon={<DesktopOutlined />}
-            onClick={startShare}
-            style={{ padding: "0 2rem", height: "3rem", fontSize: "1.1rem" }}
-          >
-            Start Sharing
-          </Button>
+          <Space>
+            <Button
+              type="primary"
+              size="large"
+              icon={<DesktopOutlined />}
+              onClick={() => startShare("screen")}
+              style={{ padding: "0 2rem", height: "3rem", fontSize: "1.1rem" }}
+            >
+              Share Screen
+            </Button>
+            <Button
+              type="default"
+              size="large"
+              icon={<VideoCameraOutlined />}
+              onClick={() => startShare("camera")}
+              style={{ padding: "0 2rem", height: "3rem", fontSize: "1.1rem" }}
+            >
+              Share Camera
+            </Button>
+          </Space>
         ) : (
           <Space direction="vertical" size="large" style={{ width: "100%" }}>
             {shareUrl && (

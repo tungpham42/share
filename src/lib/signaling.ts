@@ -14,3 +14,8 @@ export interface IceCandidatePayload {
 export interface JoinPayload {
   viewerId: string; // Identifies the connecting viewer
 }
+
+export interface CameraStatePayload {
+  viewerId: string;
+  isCameraOn: boolean;
+}
