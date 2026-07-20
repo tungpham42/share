@@ -331,41 +331,45 @@ export default function Viewer() {
             alignItems: "start",
           }}
         >
-          {/* Main Content Area: Feeds */}
-          <div className="video-wrapper" style={{ position: "relative" }}>
-            {/* Host Stream */}
-            <video
-              ref={videoRef}
-              className="viewer-video"
-              autoPlay
-              playsInline
-              style={{
-                width: "100%",
-                borderRadius: 8,
-                backgroundColor: "#000",
-              }}
-            />
-
-            {/* Picture-in-Picture for Viewer's Local Camera during a Call */}
-            {shareMode === "call" && (
+          {/* Main Content Area: Feeds & Controls */}
+          <div>
+            {/* Media Container Box */}
+            <div className="video-wrapper" style={{ position: "relative" }}>
+              {/* Host Stream */}
               <video
-                ref={localVideoRef}
+                ref={videoRef}
+                className="viewer-video"
                 autoPlay
                 playsInline
-                muted
                 style={{
-                  position: "absolute",
-                  bottom: 20,
-                  right: 20,
-                  width: 130,
-                  border: "2px solid #fff",
+                  width: "100%",
                   borderRadius: 8,
-                  backgroundColor: "#333",
-                  boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+                  backgroundColor: "#000",
                 }}
               />
-            )}
 
+              {/* Picture-in-Picture for Viewer's Local Camera during a Call */}
+              {shareMode === "call" && (
+                <video
+                  ref={localVideoRef}
+                  autoPlay
+                  playsInline
+                  muted
+                  style={{
+                    position: "absolute",
+                    bottom: 20,
+                    right: 20,
+                    width: 130,
+                    border: "2px solid #fff",
+                    borderRadius: 8,
+                    backgroundColor: "#333",
+                    boxShadow: "0 4px 12px rgba(0,0,0,0.3)",
+                  }}
+                />
+              )}
+            </div>
+
+            {/* Interactive controls moved completely below the video-wrapper block */}
             <div style={{ textAlign: "center", marginTop: "1rem" }}>
               {needsUnmute && (
                 <Button
