@@ -1,4 +1,3 @@
-// Viewer.tsx
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import type { RealtimeChannel } from "@supabase/supabase-js";
